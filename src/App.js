@@ -1,6 +1,6 @@
 import React, { Component } from 'react';
 import './App.css';
-import firebase from './firebase';
+import firebase, { auth, provider } from './firebase';
 
 class App extends Component {
   constructor() {
@@ -8,13 +8,22 @@ class App extends Component {
     this.state = {
       currentItem: '',
       username: '',
-      items: []
+      items: [],
+      user: null
     }
+    this.login = this.login.bind(this);
+    this.logout = this.logout.bind(this);
     this.handleSubmit = this.handleSubmit.bind(this);
     this.handleChange = this.handleChange.bind(this);
   }
 
   componentDidMount() {
+    auth.onAuthStateChanged((user) => {
+      if (user) {
+        this.setState({ user });
+      }
+    });
+
     const itemsRef = firebase.database().ref('items');
     itemsRef.on('value', (snapshot) => {
       const items = snapshot.val();
@@ -32,6 +41,25 @@ class App extends Component {
         items: newState
       });
     });
+  }
+
+  login() {
+    auth.signInWithPopup(provider)
+      .then((result) => {
+        const user = result.user;
+        this.setState({
+          user
+        });
+      });
+  }
+
+  logout() {
+    auth.signOut()
+      .then(() => {
+        this.setState({
+          user: null
+        });
+      });
   }
 
   handleSubmit(e) {
@@ -65,6 +93,11 @@ class App extends Component {
         <header>
           <div className='wrapper'>
             <h1>Fun Food Friends</h1>
+            {this.state.user ?
+              <button onClick={this.logout}>Log Out</button>
+              :
+              <button onClick={this.login}>Log In</button>
+            }
           </div>
         </header>
         <div className='container'>
