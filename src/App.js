@@ -1,6 +1,14 @@
 import React, { Component } from 'react';
 import './App.css';
-import firebase, { auth, provider } from './firebase';
+import firebase, { auth, googleProvider, facebookProvider } from './firebase';
+
+function getProviderForProviderId(providerId) {
+  if (providerId === 'google.com') {
+    return googleProvider;
+  } else if (providerId === 'facebook.com') {
+    return facebookProvider;
+  }
+}
 
 class App extends Component {
   constructor() {
@@ -11,13 +19,29 @@ class App extends Component {
       items: [],
       user: null
     }
-    this.login = this.login.bind(this);
+    this.googleLogin = this.googleLogin.bind(this);
+    this.facebookLogin = this.facebookLogin.bind(this);
     this.logout = this.logout.bind(this);
     this.handleSubmit = this.handleSubmit.bind(this);
     this.handleChange = this.handleChange.bind(this);
   }
 
   componentDidMount() {
+    const pendingCred = JSON.parse(localStorage.getItem('pendingCred'));
+    if (pendingCred) {
+      auth.getRedirectResult()
+        .then((result) => {
+          const token = firebase.auth.FacebookAuthProvider.credential(pendingCred);
+          result.user.linkWithCredential(token)
+            .then(() => {
+              this.setState({
+                user: result.user
+              });
+            })
+        });
+      localStorage.removeItem('pendingCred');
+    }
+
     auth.onAuthStateChanged((user) => {
       if (user) {
         this.setState({ user });
@@ -43,13 +67,46 @@ class App extends Component {
     });
   }
 
-  login() {
-    auth.signInWithPopup(provider)
+  googleLogin() {
+    auth.signInWithPopup(googleProvider)
       .then((result) => {
         const user = result.user;
         this.setState({
           user
         });
+      })
+      .catch((error) => {
+        console.log(error);
+      });
+  }
+
+  facebookLogin() {
+    auth.signInWithPopup(facebookProvider)
+      .then((result) => {
+        const user = result.user;
+        console.log(user);
+        this.setState({
+          user
+        });
+      })
+      .catch((error) => {
+        if (error.code === 'auth/account-exists-with-different-credential') {
+          localStorage.setItem('pendingCred', JSON.stringify(error.credential));
+          const email = error.email;
+          auth.fetchProvidersForEmail(email)
+            .then((providers) => {
+              if (providers[0] === 'password') {
+                // prompt user for password
+                console.log(providers);
+                return;
+              } else {
+                const provider = getProviderForProviderId(providers[0]);
+                // popup is blocked
+                auth.signInWithRedirect(provider);
+
+              }
+            });
+        }
       });
   }
 
@@ -96,7 +153,10 @@ class App extends Component {
             {this.state.user ?
               <button onClick={this.logout}>Log Out</button>
               :
-              <button onClick={this.login}>Log In</button>
+              <div>
+                <button onClick={this.googleLogin}>Google Log In</button>
+                <button onClick={this.facebookLogin}>Facebook Log In</button>
+              </div>
             }
           </div>
         </header>
