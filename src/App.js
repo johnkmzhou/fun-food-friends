@@ -19,11 +19,6 @@ class App extends Component {
       items: [],
       user: null
     }
-    this.googleLogin = this.googleLogin.bind(this);
-    this.facebookLogin = this.facebookLogin.bind(this);
-    this.logout = this.logout.bind(this);
-    this.handleSubmit = this.handleSubmit.bind(this);
-    this.handleChange = this.handleChange.bind(this);
   }
 
   componentDidMount() {
@@ -31,6 +26,9 @@ class App extends Component {
     if (pendingCred) {
       auth.getRedirectResult()
         .then((result) => {
+          console.log('Pending credentials.');
+          console.log(result);
+          console.log(pendingCred);
           const token = firebase.auth.FacebookAuthProvider.credential(pendingCred);
           result.user.linkWithCredential(token)
             .then(() => {
@@ -40,6 +38,36 @@ class App extends Component {
             })
         });
       localStorage.removeItem('pendingCred');
+    } else {
+      auth.getRedirectResult()
+        .then((result) => {
+          console.log('No pending credentials.');
+          console.log(result);
+          const user = result.user;
+          this.setState({
+            user
+          });
+        })
+        .catch((error) => {
+          console.log(error);
+          if (error.code === 'auth/account-exists-with-different-credential') {
+            console.log('account exists');
+            localStorage.setItem('pendingCred', JSON.stringify(error.credential));
+            const email = error.email;
+            auth.fetchProvidersForEmail(email)
+              .then((providers) => {
+                if (providers[0] === 'password') {
+                  console.log('email/password account');
+                  // TODO prompt user for password
+                  auth.signInWithEmailAndPassword();
+                  return;
+                } else {
+                  const provider = getProviderForProviderId(providers[0]);
+                  auth.signInWithRedirect(provider);
+                }
+              });
+          }
+        });
     }
 
     auth.onAuthStateChanged((user) => {
@@ -67,59 +95,40 @@ class App extends Component {
     });
   }
 
-  googleLogin() {
-    auth.signInWithPopup(googleProvider)
-      .then((result) => {
-        const user = result.user;
-        this.setState({
-          user
-        });
-      })
+  register = () => {
+    auth.createUserWithEmailAndPassword(this.state.email, this.state.password)
+      .then(user => console.log(user))
       .catch((error) => {
         console.log(error);
       });
-  }
+  };
 
-  facebookLogin() {
-    auth.signInWithPopup(facebookProvider)
-      .then((result) => {
-        const user = result.user;
-        console.log(user);
-        this.setState({
-          user
-        });
-      })
+  login = () => {
+    auth.signInWithEmailAndPassword(this.state.email, this.state.password)
+      .then(user => console.log(user))
       .catch((error) => {
-        if (error.code === 'auth/account-exists-with-different-credential') {
-          localStorage.setItem('pendingCred', JSON.stringify(error.credential));
-          const email = error.email;
-          auth.fetchProvidersForEmail(email)
-            .then((providers) => {
-              if (providers[0] === 'password') {
-                // prompt user for password
-                console.log(providers);
-                return;
-              } else {
-                const provider = getProviderForProviderId(providers[0]);
-                // popup is blocked
-                auth.signInWithRedirect(provider);
-
-              }
-            });
-        }
+        console.log(error);
       });
-  }
+  };
 
-  logout() {
+  googleLogin = () => {
+    auth.signInWithRedirect(googleProvider);
+  };
+
+  facebookLogin = () => {
+    auth.signInWithRedirect(facebookProvider);
+  };
+
+  logout = () => {
     auth.signOut()
       .then(() => {
         this.setState({
           user: null
         });
       });
-  }
+  };
 
-  handleSubmit(e) {
+  handleSubmit = (e) => {
     e.preventDefault();
     const itemsRef = firebase.database().ref('items');
     const item = {
@@ -131,18 +140,18 @@ class App extends Component {
       currentItem: '',
       username: ''
     });
-  }
+  };
 
-  handleChange(e) {
+  handleChange = (e) => {
     this.setState({
       [e.target.name]: e.target.value
     })
-  }
+  };
 
-  removeItem(itemId) {
+  removeItem = (itemId) => {
     const itemRef = firebase.database().ref(`/items/${itemId}`);
     itemRef.remove();
-  }
+  };
 
   render() {
     return (
@@ -154,6 +163,10 @@ class App extends Component {
               <button onClick={this.logout}>Log Out</button>
               :
               <div>
+                <input type="email" name="email" onChange={this.handleChange} />
+                <input type="password" name="password" onChange={this.handleChange} />
+                <button onClick={this.register}>Register</button>
+                <button onClick={this.login}>Login</button>
                 <button onClick={this.googleLogin}>Google Log In</button>
                 <button onClick={this.facebookLogin}>Facebook Log In</button>
               </div>
